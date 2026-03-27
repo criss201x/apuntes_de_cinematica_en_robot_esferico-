@@ -50,7 +50,20 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+# Jupyter Lab
+.jupyter/
+jupyterlab-settings/
 
+# Jupyter conversion logs
+*.nbconvert_log
+
+# Jupyter kernels
+kernels/
+anaconda_projects/
+.virtual_documents/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
 # Translations
 *.mo
 *.pot
