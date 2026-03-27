@@ -1,0 +1,1 @@
+# apuntes_de_cinematica_en_robot_esferico-
