@@ -1,0 +1,228 @@
+
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Robot Esférico (RRP) - Interactivo</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: #f4f6f8;
+      color: #222;
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid #d8dde3;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 180px 1fr 80px;
+      gap: 10px;
+      align-items: center;
+      margin: 8px 0;
+    }
+    .row input[type=range] {
+      width: 100%;
+    }
+    #plot {
+      width: 100%;
+      height: 760px;
+      background: #fff;
+      border: 1px solid #d8dde3;
+      border-radius: 10px;
+    }
+    .note {
+      font-size: 13px;
+      color: #4c5966;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="row">
+        <label for="theta1">θ1 Azimut (°)</label>
+        <input id="theta1" type="range" min="-180" max="180" step="5" value="0" />
+        <span id="theta1Val">0</span>
+      </div>
+      <div class="row">
+        <label for="theta2">θ2 Elevación (°)</label>
+        <input id="theta2" type="range" min="-90" max="90" step="5" value="30" />
+        <span id="theta2Val">30</span>
+      </div>
+      <div class="row">
+        <label for="d3">d3 Extensión (m)</label>
+        <input id="d3" type="range" min="0" max="0.7" step="0.05" value="0.5" />
+        <span id="d3Val">0.50</span>
+      </div>
+      <div class="note">
+        Esta versión es standalone: abre este archivo en cualquier navegador y conserva la interactividad.
+      </div>
+    </div>
+    <div id="plot"></div>
+  </div>
+
+  <script>
+    const h_base = 0.2;
+    const L2 = 0.3;
+
+    function deg2rad(deg) { return deg * Math.PI / 180; }
+
+    function Rz(a) {
+      return [
+        [Math.cos(a), -Math.sin(a), 0],
+        [Math.sin(a),  Math.cos(a), 0],
+        [0, 0, 1]
+      ];
+    }
+
+    function Ry(a) {
+      return [
+        [Math.cos(a), 0, Math.sin(a)],
+        [0, 1, 0],
+        [-Math.sin(a), 0, Math.cos(a)]
+      ];
+    }
+
+    function matVecMul(M, v) {
+      return [
+        M[0][0]*v[0] + M[0][1]*v[1] + M[0][2]*v[2],
+        M[1][0]*v[0] + M[1][1]*v[1] + M[1][2]*v[2],
+        M[2][0]*v[0] + M[2][1]*v[1] + M[2][2]*v[2]
+      ];
+    }
+
+    function matMul(A, B) {
+      const C = [[0,0,0],[0,0,0],[0,0,0]];
+      for (let i=0;i<3;i++) {
+        for (let j=0;j<3;j++) {
+          C[i][j] = A[i][0]*B[0][j] + A[i][1]*B[1][j] + A[i][2]*B[2][j];
+        }
+      }
+      return C;
+    }
+
+    function add(a,b){ return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+    function mul(k,v){ return [k*v[0], k*v[1], k*v[2]]; }
+    function norm(v){ return Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]); }
+
+    function calc(theta1Deg, theta2Deg, d3) {
+      const t1 = deg2rad(theta1Deg);
+      const t2 = deg2rad(theta2Deg);
+
+      const origen = [0, 0, 0];
+      const pos1 = [0, 0, h_base];
+
+      const Rt = matMul(Rz(t1), Ry(t2));
+      const brazoLocal = [L2, 0, 0];
+      const brazoRotado = matVecMul(Rt, brazoLocal);
+      const pos2 = add(pos1, brazoRotado);
+
+      const dir = mul(1 / norm(brazoRotado), brazoRotado);
+      const pos3 = add(pos2, mul(d3, dir));
+
+      return { origen, pos1, pos2, pos3, Rt };
+    }
+
+    function sphere(pos1, r, nu=30, nv=20) {
+      const x = [], y = [], z = [];
+      for (let i=0;i<nu;i++) {
+        const u = (2*Math.PI*i)/(nu-1);
+        const xr=[], yr=[], zr=[];
+        for (let j=0;j<nv;j++) {
+          const v = (Math.PI*j)/(nv-1);
+          xr.push(r*Math.cos(u)*Math.sin(v) + pos1[0]);
+          yr.push(r*Math.sin(u)*Math.sin(v) + pos1[1]);
+          zr.push(r*Math.cos(v) + pos1[2]);
+        }
+        x.push(xr); y.push(yr); z.push(zr);
+      }
+      return {x,y,z};
+    }
+
+    function traces(theta1, theta2, d3) {
+      const {origen, pos1, pos2, pos3, Rt} = calc(theta1, theta2, d3);
+      const se = sphere(pos1, L2 + d3);
+      const le = 0.15;
+
+      const ex = matVecMul(Rt, [le,0,0]);
+      const ey = matVecMul(Rt, [0,le,0]);
+      const ez = matVecMul(Rt, [0,0,le]);
+
+      return [
+        {type:'scatter3d', mode:'lines', x:[origen[0],pos1[0]], y:[origen[1],pos1[1]], z:[origen[2],pos1[2]], line:{color:'black', width:10}, name:'Base fija'},
+        {type:'scatter3d', mode:'lines', x:[pos1[0],pos2[0]], y:[pos1[1],pos2[1]], z:[pos1[2],pos2[2]], line:{color:'blue', width:8}, name:'Brazo rotatorio'},
+        {type:'scatter3d', mode:'lines', x:[pos2[0],pos3[0]], y:[pos2[1],pos3[1]], z:[pos2[2],pos3[2]], line:{color:'red', width:6}, name:'Extensión telescópica'},
+
+        {type:'scatter3d', mode:'markers', x:[origen[0]], y:[origen[1]], z:[origen[2]], marker:{size:8, color:'black'}, name:'Base'},
+        {type:'scatter3d', mode:'markers', x:[pos1[0]], y:[pos1[1]], z:[pos1[2]], marker:{size:7, color:'blue'}, name:'Articulación 1 (R)'},
+        {type:'scatter3d', mode:'markers', x:[pos2[0]], y:[pos2[1]], z:[pos2[2]], marker:{size:7, color:'green'}, name:'Articulación 2 (R)'},
+        {type:'scatter3d', mode:'markers', x:[pos3[0]], y:[pos3[1]], z:[pos3[2]], marker:{size:9, color:'red', symbol:'square'}, name:'Extremo (efector)'},
+
+        {type:'scatter3d', mode:'lines', x:[pos1[0],pos1[0]+le], y:[pos1[1],pos1[1]], z:[pos1[2],pos1[2]], line:{color:'red', width:4}, showlegend:false},
+        {type:'scatter3d', mode:'lines', x:[pos1[0],pos1[0]], y:[pos1[1],pos1[1]+le], z:[pos1[2],pos1[2]], line:{color:'green', width:4}, showlegend:false},
+        {type:'scatter3d', mode:'lines', x:[pos1[0],pos1[0]], y:[pos1[1],pos1[1]], z:[pos1[2],pos1[2]+le], line:{color:'blue', width:4}, showlegend:false},
+
+        {type:'scatter3d', mode:'lines', x:[pos3[0],pos3[0]+ex[0]], y:[pos3[1],pos3[1]+ex[1]], z:[pos3[2],pos3[2]+ex[2]], line:{color:'darkred', width:5}, showlegend:false},
+        {type:'scatter3d', mode:'lines', x:[pos3[0],pos3[0]+ey[0]], y:[pos3[1],pos3[1]+ey[1]], z:[pos3[2],pos3[2]+ey[2]], line:{color:'darkgreen', width:5}, showlegend:false},
+        {type:'scatter3d', mode:'lines', x:[pos3[0],pos3[0]+ez[0]], y:[pos3[1],pos3[1]+ez[1]], z:[pos3[2],pos3[2]+ez[2]], line:{color:'darkblue', width:5}, showlegend:false},
+
+        {type:'surface', x:se.x, y:se.y, z:se.z, opacity:0.12, showscale:false, colorscale:[[0,'cyan'],[1,'cyan']], name:'Alcance'}
+      ];
+    }
+
+    function layout(theta1, theta2, d3) {
+      const p = calc(theta1, theta2, d3).pos3;
+      return {
+        title: `Robot Esférico (RRP)<br>θ1=${theta1.toFixed(1)}° (azimut), θ2=${theta2.toFixed(1)}° (elevación), d3=${d3.toFixed(2)} m (extensión)<br>Posición extremo: (${p[0].toFixed(3)}, ${p[1].toFixed(3)}, ${p[2].toFixed(3)}) m`,
+        scene: {
+          xaxis: {title: 'X (m)', range: [-1, 1]},
+          yaxis: {title: 'Y (m)', range: [-1, 1]},
+          zaxis: {title: 'Z (m)', range: [0, 1.2]},
+          aspectmode: 'cube',
+          camera: {eye: {x: 1.4, y: 1.4, z: 0.9}}
+        },
+        margin: {l: 0, r: 0, t: 90, b: 0},
+        legend: {x: 0.01, y: 0.99}
+      };
+    }
+
+    const theta1El = document.getElementById('theta1');
+    const theta2El = document.getElementById('theta2');
+    const d3El = document.getElementById('d3');
+    const theta1Val = document.getElementById('theta1Val');
+    const theta2Val = document.getElementById('theta2Val');
+    const d3Val = document.getElementById('d3Val');
+
+    function render() {
+      const theta1 = Number(theta1El.value);
+      const theta2 = Number(theta2El.value);
+      const d3 = Number(d3El.value);
+
+      theta1Val.textContent = theta1.toString();
+      theta2Val.textContent = theta2.toString();
+      d3Val.textContent = d3.toFixed(2);
+
+      Plotly.react('plot', traces(theta1, theta2, d3), layout(theta1, theta2, d3), {responsive: true});
+    }
+
+    theta1El.addEventListener('input', render);
+    theta2El.addEventListener('input', render);
+    d3El.addEventListener('input', render);
+
+    render();
+  </script>
+</body>
+</html>
