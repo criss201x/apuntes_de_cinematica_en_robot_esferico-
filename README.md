@@ -1,1 +1,4 @@
-# apuntes_de_cinematica_en_robot_esferico-
+# 3.1 — Producto interno y normas vectoriales
+> **Fuente:** MATLAB Aplicado a Robótica y Mecatrónica — Fernando Reyes Cortés (Cap. 3)
+
+---
